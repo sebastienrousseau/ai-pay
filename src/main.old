@@ -1,0 +1,56 @@
+use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use serde::Deserialize;
+use std::time::Instant;
+
+// A struct to represent a payment transaction
+#[derive(Debug)]
+struct PaymentTransaction {
+    id: u64,
+    amount: f64,
+}
+
+// Struct to represent the URL parameters for the payment transaction API
+#[derive(Debug, Deserialize)]
+struct PaymentParams {
+    id: u64,
+    amount: f64,
+}
+
+// Handler function for the payment transaction API
+#[get("/payment")]
+async fn process_payment(web::Query(params): web::Query<PaymentParams>) -> impl Responder {
+    let payment = PaymentTransaction {
+        id: params.id,
+        amount: params.amount,
+    };
+    let start = Instant::now();
+    let is_fraud = predict_fraud(&payment);
+    let duration = start.elapsed();
+    let response = if is_fraud {
+        format!(
+            "Payment transaction {} is fraudulent! Execution time: {:?}",
+            payment.id, duration
+        )
+    } else {
+        format!(
+            "Payment transaction {} processed successfully. Execution time: {:?}",
+            payment.id, duration
+        )
+    };
+    HttpResponse::Ok().body(response)
+}
+
+fn predict_fraud(payment: &PaymentTransaction) -> bool {
+    // Simulating a machine learning model to predict fraud
+    // This could be a more complex model based on real-world data
+    // For this example, we're using a simple model that predicts fraud if the amount is over $1,000
+    payment.amount > 1000.0
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| App::new().service(process_payment))
+        .bind("127.0.0.1:8080")?
+        .run()
+        .await
+}

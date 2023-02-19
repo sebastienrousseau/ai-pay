@@ -1,103 +1,102 @@
-extern crate rustlearn;
+// Import necessary crates and modules
+use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use serde::Deserialize;
+use std::time::Instant;
 
-use actix_web::{get, web, App, HttpServer};
-use serde::{Deserialize, Serialize};
-use std::{fs::File, io::prelude::*, time::Instant};
-
-use rustlearn::prelude::*;
-
-// A struct to represent a payment transaction
+// Define a struct `PaymentParams` that represents the payment parameters
+// This struct implements the `Deserialize` trait to allow for deserializing from JSON
 #[derive(Debug, Deserialize)]
-struct PaymentTransaction {
-    id: u64,
-    amount: f64,
+pub struct PaymentParams {
+    pub id: u64,
+    pub amount: f64,
 }
 
-// Struct to represent the URL parameters for the payment transaction API
-#[derive(Debug, Deserialize)]
-struct PaymentParams {
-    id: u64,
-    amount: f64,
+// Define a struct `PaymentResult` that represents the result of the payment
+// This struct implements the `Deserialize` trait to allow for deserializing from JSON
+#[derive(Deserialize)]
+pub struct PaymentResult {
+    pub id: u64,
+    pub amount: f64,
+    pub success: bool,
+    pub fraud: bool,
+    pub duration: f64,
+    pub response: String,
+}
+// Implement the `Display` trait for `PaymentResult`
+impl std::fmt::Display for PaymentResult {
+    // Define the `fmt` function that formats the `PaymentResult` struct as a string
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Truncate the duration to milliseconds and format the output string
+        let duration_millis = self.duration.trunc() / 1_000_000.0;
+        write!(
+            f,
+            "| {:<10} | {:<18} | {:<12} | {:<10.2} | {:03} ms | {:<40} |\n",
+            self.id,
+            if self.success {
+                "Payment successful"
+            } else {
+                "Payment failed"
+            },
+            if self.fraud {
+                "Fraud detected"
+            } else {
+                "No fraud detected"
+            },
+            self.amount,
+            duration_millis,
+            self.response
+        )
+    }
 }
 
-// Struct to represent the features of a payment transaction
-#[derive(Debug, Serialize)]
-struct PaymentFeatures {
-    id: f64,
-    amount: f64,
-}
-
-// Handler function for the payment transaction API
+// Define the `process_payment` function that processes the payment
+// This function is marked with the `get` attribute to indicate that it is a GET request handler
+// It takes in the payment parameters as a query parameter
 #[get("/payment")]
-async fn process_payment(
-    web::Query(params): web::Query<PaymentParams>,
-) -> impl actix_web::Responder {
-    let payment = PaymentTransaction {
+pub async fn process_payment(web::Query(params): web::Query<PaymentParams>) -> impl Responder {
+    // Create a `PaymentParams` object from the query parameter
+    let payment = PaymentParams {
         id: params.id,
         amount: params.amount,
     };
+    // Get the start time
     let start = Instant::now();
-    let is_fraud = predict_fraud(&payment, &nb);
+    // Predict whether the payment is fraudulent based on the payment amount
+    let is_fraud = predict_fraud(&payment);
+    // Get the duration of the payment processing
     let duration = start.elapsed();
-    let response = if is_fraud {
-        format!(
-            "Payment transaction {} is fraudulent! Execution time: {:?}",
-            payment.id, duration
-        )
-    } else {
-        format!(
-            "Payment transaction {} processed successfully. Execution time: {:?}",
-            payment.id, duration
-        )
+    // Print the start time and duration to the console
+    println!("start: {:?}", start);
+    println!("duration: {:?}", duration);
+    // Create a `PaymentResult` object from the payment processing results
+    let result = PaymentResult {
+        id: payment.id,
+        success: !is_fraud,
+        fraud: is_fraud,
+        amount: payment.amount,
+        duration: duration.as_nanos() as f64,
+        response: format!("Payment {} processed", payment.id),
     };
-    actix_web::HttpResponse::Ok().body(response)
+    // Return an HTTP response with the `PaymentResult` object formatted as a string
+    HttpResponse::Ok().body(result.to_string())
 }
 
-// Train a machine learning model to predict fraud
-fn train_model() -> (SparseRowArray, Array) {
-    // Load the training data from a CSV file
-    let mut file = File::open("transactions.csv").unwrap();
-    let mut data = String::new();
-    file.read_to_string(&mut data).unwrap();
-    let mut reader = csv::Reader::from_reader(data.as_bytes());
-    let mut features: Vec<SparseRowArray> = vec![];
-    let mut targets: Vec<f32> = vec![];
-    for result in reader.records() {
-        let record = result.unwrap();
-        let id = record[0].parse().unwrap();
-        let amount = record[1].parse().unwrap();
-        let mut row = SparseRowArray::zeros(1, 2);
-        row.set(0, id, 1.0);
-        row.set(1, amount, 1.0);
-        features.push(row);
-        let target = record[2].parse().unwrap();
-        targets.push(target);
-    }
-
-    let x = SparseRowArray::from(&features);
-
-    let y = Array::from(targets);
-    (x, y)
+// Define the `predict_fraud` function that predicts whether the payment is fraudulent
+// This function takes in a reference to a `PaymentParams` object
+// If the payment amount is greater than 1000.0, it is considered fraudulent
+fn predict_fraud(payment: &PaymentParams) -> bool {
+    payment.amount > 1000.0
 }
 
-// Predict fraud using a trained machine learning model
-pub fn predict_fraud(payment: &PaymentTransaction) -> bool {
-    // Convert the payment transaction to features
-    let features =
-        SparseRowArray::from_row_iter(1, 2, vec![payment.id, payment.amount].into_iter().cloned())
-            .unwrap();
-    // Predict whether the payment is fraudulent using the trained model
-    let prediction = nb.predict(&features).unwrap();
-    prediction[0] > 0.5
-}
-
+// Define the main function that starts the HTTP server
+// This function is marked with the `actix_web::main` attribute to indicate that it is the main entry point for the application
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    // Train a machine learning model to predict fraud
-    let nb = train_model().expect("Error loading training data");
-    // Start the web server
+pub async fn main() -> std::io::Result<()> {
+    // Create an HTTP server and bind it to a specific address and port
     HttpServer::new(|| App::new().service(process_payment))
         .bind("127.0.0.1:8080")?
         .run()
-        .await
+        .await?;
+
+    Ok(())
 }

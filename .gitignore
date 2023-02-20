@@ -5,4 +5,4 @@
 build
 Cargo.lock
 Icon?
-src/.DS_Store
+.DS_Store

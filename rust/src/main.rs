@@ -14,7 +14,7 @@ pub struct PaymentParams {
 
 // Define a struct `PaymentResult` that represents the result of the payment
 // This struct implements the `Deserialize` trait to allow for deserializing from JSON
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct PaymentResult {
     pub id: u64,
     pub amount: f64,
@@ -54,7 +54,7 @@ impl std::fmt::Display for PaymentResult {
 // This function is marked with the `get` attribute to indicate that it is a GET request handler
 // It takes in the payment parameters as a query parameter
 #[get("/payment")]
-pub async fn process_payment(web::Query(params): web::Query<PaymentParams>) -> impl Responder {
+pub(crate) async fn process_payment(web::Query(params): web::Query<PaymentParams>) -> impl Responder {
     // Create a `PaymentParams` object from the query parameter
     let payment = PaymentParams {
         id: params.id,

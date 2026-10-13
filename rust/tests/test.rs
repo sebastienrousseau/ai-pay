@@ -1,3 +1,6 @@
+//! Integration tests for the payment endpoint. They are commented out
+//! until the binary exposes a library target they can import.
+
 // #[cfg(test)]
 // mod tests {
 //     use actix_web::{http::StatusCode, test, web, App};
